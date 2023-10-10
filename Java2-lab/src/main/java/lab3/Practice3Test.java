@@ -3,8 +3,6 @@ package lab3;
 import org.junit.*;
 
 import static org.junit.Assert.assertEquals;
-//import static org.junit.jupiter.api.Assertions.*;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;

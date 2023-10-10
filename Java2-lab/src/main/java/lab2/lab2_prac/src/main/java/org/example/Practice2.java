@@ -1,4 +1,4 @@
-package org.example;
+package lab2.lab2_prac.src.main.java.org.example;
 
 import org.openjdk.jmh.annotations.*;
 import org.openjdk.jmh.runner.Runner;
