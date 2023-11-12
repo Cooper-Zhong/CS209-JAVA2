@@ -138,10 +138,12 @@ public class Client {
                 }
 
                 if (progressInfo.isCanceled()) {
+                    dos.writeUTF("cancel"); //signal the server to cancel
                     progressMap.remove(file.getName());
                     fis.close();
                     dos.close();
                     socket.close();
+                    return;
                 }
 
 
@@ -155,9 +157,6 @@ public class Client {
             dos.close();
             socket.close();
 
-            System.out.println("====================================");
-            System.out.println("File uploaded successfully: " + file.getName());
-            System.out.println("====================================");
             // 上传完成后从Map中移除上传进度信息
             progressMap.remove(file.getName());
 
@@ -194,13 +193,21 @@ public class Client {
     // Query all upload tasks and their progress
     private static void queryAllTasks() {
         System.out.println("Current upload tasks:");
+        if (progressMap.isEmpty()) {
+            System.out.println("No tasks.");
+            return;
+        }
+
         for (Map.Entry<String, ProgressInfo> entry : progressMap.entrySet()) {
             String fileName = entry.getKey();
             ProgressInfo progressInfo = entry.getValue();
             String status = progressInfo.isPaused() ? "Paused" : "In Progress";
             long current = progressInfo.getCurrentBytes();
             long total = progressInfo.getTotalBytes(); // avoid division by zero
-            System.out.println(fileName + ": " + current + "/" + total + " KB\t" + (current*100.0/total) + "%" + "\t" + status);
+            System.out.print(fileName + ": " + (current/1024) + "/" + (total/1024) + " KB\t");
+            System.out.printf("%.2f", (current/total*100.0));
+            System.out.println("%\t" + status);
+            System.out.println("====================================");
         }
     }
 

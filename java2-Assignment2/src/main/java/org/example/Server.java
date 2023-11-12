@@ -43,7 +43,7 @@ public class Server {
             DataInputStream dis = new DataInputStream(inputStream);
             String signal = dis.readUTF(); // main client or file transfer socket.
             if (signal.equals("main")) {
-                handleMainClient(clientSocket, inputStream, dis); // operations: upload, download ...
+//                handleMainClient(clientSocket, inputStream, dis); // operations: upload, download ...
             } else if (signal.equals("file")) {
                 handleFileTransferClient(clientSocket, inputStream, dis); // filename, filesize.
             }
@@ -70,22 +70,52 @@ public class Server {
             // Receive file content from the client
             while ((bytesRead = inputStream.read(buffer)) != -1) {
 
+                try { // check if the client canceled the upload
+                    if (dis.available()>0) {
+                        String cancelSignal = dis.readUTF(); // cancel or not
+                        if (cancelSignal.equals("cancel")) {
+                            System.out.println(fileName + " canceled by the client.");
+                            fileOutputStream.close();
+                            // 从Map中移除上传进度信息
+                            progressMap.remove(fileName);
+                            try {
+                                //delete the file
+                                File file = new File(STORAGE_FOLDER + fileName);
+                                file.delete();
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                            dis.close();
+                            clientSocket.close();
+                            return;
+                        }
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
                 fileOutputStream.write(buffer, 0, bytesRead);
             }
 
             fileOutputStream.close();
             dis.close();
             clientSocket.close();
-
+            System.out.println("====================================");
             System.out.println("File received: " + fileName);
+            System.out.println("====================================");
+
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private static boolean cancellationRequested(String fileName) {
-        ProgressInfo progressInfo = progressMap.get(fileName);
 
+    private static boolean checkCancel(String fileName) {
+        ProgressInfo progressInfo = progressMap.get(fileName);
+        if (progressInfo != null) {
+            return progressInfo.isCanceled();
+        }
+        return true;
     }
 
 
