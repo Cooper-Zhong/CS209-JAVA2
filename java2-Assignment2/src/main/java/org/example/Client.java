@@ -17,18 +17,19 @@ public class Client {
     static ExecutorService executor = Executors.newFixedThreadPool(5);
 
     static List<Callable<String>> tasks = new ArrayList<>();
-
     private static final Map<String, ProgressInfo> progressMap = new ConcurrentHashMap<>();
 
 
     public static void main(String[] args) {
-        // 创建单个 Socket
         try {
+            // main socket
             Socket socket = new Socket(SERVER_IP, SERVER_PORT);
             OutputStream outputStream = socket.getOutputStream();
-            DataOutputStream dos = new DataOutputStream(outputStream);
+            PrintWriter out = new PrintWriter(outputStream, true);
 
             System.out.println("Connected to server " + SERVER_IP + ":" + SERVER_PORT);
+//            dos.writeUTF("main");
+            out.println("main");
             Scanner sc = new Scanner(System.in);
 
             label:
@@ -68,16 +69,17 @@ public class Client {
                         cancelTask(sc.nextLine());
                         break;
                     case "7":
+//                        dos.writeUTF("exit");
+                        out.println("exit");
                         break label;
                     default:
                         System.out.println("Invalid choice.");
                 }
             }
-            dos.writeUTF("client exit");
-            dos.close();
+            out.close();
             socket.close();
             System.out.println("Disconnected from server.");
-            executor.shutdown(); // 关闭线程池
+            executor.shutdown();
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -94,10 +96,8 @@ public class Client {
         if (files != null && files.length>0) {
             for (File file : files) {
                 if (file.isDirectory()) {
-                    // If it's a directory, recursively call the method
                     uploadFolder(file.getName());
                 } else {
-                    // If it's a file, submit it to the executor for concurrent uploading
                     executor.submit(() -> upload(file));
                 }
             }
@@ -106,9 +106,11 @@ public class Client {
         }
     }
 
-    private static void upload(File file) {//concurrently upload files
+    private static void upload(File file) {
+        //concurrently upload files
         try {
-            Socket socket = new Socket(SERVER_IP, SERVER_PORT); // socket for file transfer
+            // socket for file transfer
+            Socket socket = new Socket(SERVER_IP, SERVER_PORT);
             OutputStream outputStream = socket.getOutputStream();
             DataOutputStream dos = new DataOutputStream(outputStream);
 
@@ -125,6 +127,8 @@ public class Client {
             byte[] buffer = new byte[4096];
             int bytesRead;
             long totalBytesRead = 0;
+            boolean canceled = false;
+
 
             // Send file content to the server
             while ((bytesRead = fis.read(buffer)) != -1) {
@@ -138,18 +142,11 @@ public class Client {
                 }
 
                 if (progressInfo.isCanceled()) {
-                    dos.writeUTF("cancel"); //signal the server to cancel
-                    progressMap.remove(file.getName());
-                    fis.close();
-                    dos.close();
-                    socket.close();
-                    return;
+                    canceled = true;
+                    break;
                 }
-
-
                 outputStream.write(buffer, 0, bytesRead);
                 updateProgress(file.getName(), bytesRead);
-
             }
 
             // Signal the end of file
@@ -171,6 +168,8 @@ public class Client {
         ProgressInfo progressInfo = progressMap.get(fileName);
         if (progressInfo != null) {
             progressInfo.setPaused(true);
+//            out.println("pause");
+//            out.println(fileName);
         }
     }
 
@@ -179,6 +178,8 @@ public class Client {
         ProgressInfo progressInfo = progressMap.get(fileName);
         if (progressInfo != null) {
             progressInfo.setPaused(false);
+//            out.println("resume");
+//            out.println(fileName);
         }
     }
 
@@ -187,14 +188,19 @@ public class Client {
         ProgressInfo progressInfo = progressMap.get(fileName);
         if (progressInfo != null) {
             progressInfo.setCanceled(true);
+            progressInfo.setPaused(false);
+//            out.println("cancel");
+//            out.println(fileName);
         }
     }
 
     // Query all upload tasks and their progress
     private static void queryAllTasks() {
+        System.out.println("====================================");
         System.out.println("Current upload tasks:");
         if (progressMap.isEmpty()) {
             System.out.println("No tasks.");
+            System.out.println("============");
             return;
         }
 
@@ -211,16 +217,6 @@ public class Client {
         }
     }
 
-
-    // 查询上传进度
-    private static void queryProgress() {
-        System.out.println("progress for each file:");
-        for (Map.Entry<String, ProgressInfo> entry : progressMap.entrySet()) {
-            String fileName = entry.getKey();
-            ProgressInfo progressInfo = entry.getValue();
-
-        }
-    }
 
     // 更新上传进度信息
     static void updateProgress(String fileName, int bytesRead) {
