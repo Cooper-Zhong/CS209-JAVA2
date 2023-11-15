@@ -12,9 +12,9 @@ public class Client {
 
     private static final String SERVER_IP = "localhost";
     private static final int SERVER_PORT = 12345;
-    private static final String UPLOAD_FOLDER = "Upload";
+    private static final String UPLOAD_FOLDER = "Upload/";
 
-    private static final String DOWNLOAD_FOLDER = "Download";
+    private static final String DOWNLOAD_FOLDER = "Download/";
 
     private static final String STORAGE_FOLDER = "Storage";
 
@@ -64,8 +64,7 @@ public class Client {
                     case "2":
                         queryResources(socket, dis, dos);
                         System.out.print("Enter the file/folder name to download: ");
-//                        String fileName = sc.nextLine();
-                        downloadFolder(sc.nextLine());
+                        downloadFolder(sc.nextLine(), dis, dos);
                         break;
                     case "3":
                         queryAllTasks(); // Query all tasks and their progress
@@ -94,6 +93,7 @@ public class Client {
             socket.close();
             System.out.println("Disconnected from server.");
             executor.shutdown();
+            System.exit(0);
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -113,57 +113,54 @@ public class Client {
         }
     }
 
+    private static List<String> askName(String fileName, DataInputStream dis, DataOutputStream dos) {
+        // 获得一个文件到底是文件还是文件夹，如果是文件夹，拿到文件夹下的所有文件名
+        try {
+            dos.writeUTF("ask");
+            dos.writeUTF(fileName);
 
-    private static void downloadFolder(String fileName) {
-        File file = new File(fileName);
+            ArrayList<String> names = new ArrayList<>();
 
-        if (!file.exists()) {
-            System.out.println("File or folder does not exist.");
-            return;
-        }
-
-        if (file.isFile()) {
-            // 如果是文件，直接提交下载任务到线程池
-            executor.submit(() -> download(file));
-        } else if (file.isDirectory()) {
-            // 如果是文件夹，递归遍历文件夹并提交下载任务到线程池
-            traverseAndDownload(file);
-        }
-
-    }
-
-    private static void traverseAndDownload(File folder) {
-        File[] files = folder.listFiles();
-        if (files != null) {
-            for (File file : files) {
-                if (file.isDirectory()) {
-                    // 递归处理子文件夹
-                    traverseAndDownload(file);
-                } else {
-                    // 提交文件下载任务到线程池
-                    executor.submit(() -> download(file));
-                }
+            String name;
+            while (!(name = dis.readUTF()).equals("END_OF_LIST")) {
+                System.out.print(name + "\t");
+                names.add(name);
             }
+            System.out.println();
+            return names;
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
         }
     }
 
 
-    private static void download(File file) {
+    private static void downloadFolder(String fileName, DataInputStream dis, DataOutputStream dos) {
+        List<String> files = askName(fileName, dis, dos); // 获得文件夹下的所有文件名.
+        for (String file : files) {
+            executor.submit(() -> download(file)); //创建新的socket，并发下载文件
+        }
+    }
+
+
+    private static void download(String fileName) {
         try {
             Socket socket = new Socket(SERVER_IP, SERVER_PORT);
             InputStream inputStream = socket.getInputStream();
             DataInputStream dis = new DataInputStream(inputStream);
+            DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
 
-            String fileName = file.getName();
-            out.println("download");
-            out.println("download " + fileName);
+//            out.println("download");
+//            out.println("download " + fileName);
+            dos.writeUTF("download");
+            dos.writeUTF(fileName);
 
             long fileSize = dis.readLong();
             ProgressInfo progress = new ProgressInfo("download", 0, fileSize);
             progressMap.put(fileName, progress);
-            FileOutputStream fileOutputStream = new FileOutputStream(DOWNLOAD_FOLDER + fileName);
 
+            FileOutputStream fileOutputStream = new FileOutputStream(DOWNLOAD_FOLDER + fileName);
             byte[] buffer = new byte[4096];
             int bytesRead;
             while ((bytesRead = inputStream.read(buffer)) != -1) {

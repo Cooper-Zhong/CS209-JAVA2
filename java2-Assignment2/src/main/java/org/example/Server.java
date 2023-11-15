@@ -3,6 +3,8 @@ package org.example;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 
@@ -10,7 +12,7 @@ public class Server {
 
     private static final int PORT = 12345;
     private static final String STORAGE_FOLDER = "Storage/";
-    private static final String RESOURCES_FOLDER = "Resources";
+    private static final String RESOURCES_FOLDER = "Resources/";
     private static final Map<String, ProgressInfo> progressMap = new ConcurrentHashMap<>();
 
     private static final Map<String, Socket> socketMap = new ConcurrentHashMap<>(); // filename, socket
@@ -47,7 +49,7 @@ public class Server {
             } else if (signal.equals("upload")) {
                 handleUpload(clientSocket, inputStream, dis); // filename, filesize.
             } else if (signal.equals("download")) {
-                handleDownload(clientSocket, br); // filename
+                handleDownload(clientSocket, inputStream, dis); // filename
             }
 
         } catch (IOException e) {
@@ -55,18 +57,10 @@ public class Server {
         }
     }
 
-    private static void handleDownload(Socket clientSocket, BufferedReader reader) {
-        String clientRequest;
+    private static void handleDownload(Socket clientSocket, InputStream inputStream, DataInputStream dis) {
         try {
-            while ((clientRequest = reader.readLine()) != null) {
-                if (clientRequest.startsWith("download")) {
-                    String[] tokens = clientRequest.split(" ");
-                    if (tokens.length == 2) {
-                        String fileName = tokens[1];
-                        sendFile(clientSocket, fileName);
-                    }
-                }
-            }
+            String filename = dis.readUTF();
+            sendFile(clientSocket, filename);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -79,16 +73,18 @@ public class Server {
             if (fileToSend.exists() && !fileToSend.isDirectory()) {
                 OutputStream outputStream = clientSocket.getOutputStream();
                 DataOutputStream dos = new DataOutputStream(outputStream);
-                FileInputStream fileInputStream = new FileInputStream(fileToSend);
+                FileInputStream fis = new FileInputStream(fileToSend);
 
                 dos.writeLong(fileToSend.length()); // file size
 
                 byte[] buffer = new byte[4096];
                 int bytesRead;
-                while ((bytesRead = fileInputStream.read(buffer)) != -1) {
+                while ((bytesRead = fis.read(buffer)) != -1) {
                     outputStream.write(buffer, 0, bytesRead);
                 }
-                fileInputStream.close();
+                fis.close();
+                 dos.close(); //????
+
                 outputStream.flush();
             }
         } catch (IOException e) {
@@ -107,6 +103,11 @@ public class Server {
                 switch (op) {
                     case "query":
                         sendResourceList(clientSocket);
+                        break;
+                    case "ask":
+                        sendFileList(clientSocket);
+                        break;
+
                     case "pause":
                         //                    fileName = in.readLine();
                         //                    Socket socket = socketMap.get(fileName);
@@ -141,8 +142,61 @@ public class Server {
             }
         } catch (IOException e) {
             e.printStackTrace();
+            System.out.println("Client disconnected.");
         }
 
+    }
+
+    private static List<String> getSubFiles(String fileName) {
+        List<String> fileList = new ArrayList<>();
+        File file = new File(fileName);
+
+        if (!file.exists()) {
+            System.out.println("File or folder does not exist.");
+            return fileList;
+        }
+
+        if (file.isFile()) {
+            fileList.add(file.getName());
+        } else if (file.isDirectory()) {
+            getAllFilesRecursive(file, fileList);
+        }
+
+        return fileList;
+    }
+
+    private static void getAllFilesRecursive(File folder, List<String> fileList) {
+        File[] files = folder.listFiles();
+
+        if (files != null) {
+            for (File file : files) {
+                if (file.isDirectory()) {
+                    getAllFilesRecursive(file, fileList);
+                } else {
+                    fileList.add(file.getName());
+                }
+            }
+        }
+    }
+
+    private static void sendFileList(Socket clientSocket) {
+        try {
+            OutputStream outputStream = clientSocket.getOutputStream();
+            PrintWriter writer = new PrintWriter(new OutputStreamWriter(outputStream));
+            DataOutputStream dos = new DataOutputStream(outputStream);
+            DataInputStream dis = new DataInputStream(clientSocket.getInputStream());
+
+            String askedName = dis.readUTF(); // read file name
+            List<String> fileList = getSubFiles(RESOURCES_FOLDER + askedName);
+            for (String fileName : fileList) {
+                dos.writeUTF(fileName);
+            }
+            dos.writeUTF("END_OF_LIST");
+
+
+        } catch (IOException e) {
+            System.out.println(e.getMessage());
+        }
     }
 
     private static void sendResourceList(Socket clientSocket) {
@@ -151,13 +205,12 @@ public class Server {
             PrintWriter writer = new PrintWriter(new OutputStreamWriter(outputStream));
             DataOutputStream dos = new DataOutputStream(outputStream);
             File resourcesFolder = new File(RESOURCES_FOLDER);
-            if (resourcesFolder.exists() && resourcesFolder.isDirectory()) {
-                File[] files = resourcesFolder.listFiles();
-                if (files != null) {
-                    for (File file : files) {
-                        dos.writeUTF(file.getName());
-                    }
+            File[] files = resourcesFolder.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    dos.writeUTF(file.getName());
                 }
+
             }
             dos.writeUTF("END_OF_LIST");
         } catch (IOException e) {
