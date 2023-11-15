@@ -12,7 +12,13 @@ public class Client {
 
     private static final String SERVER_IP = "localhost";
     private static final int SERVER_PORT = 12345;
-    private static final String UPLOAD_FOLDER = "Upload/";
+    private static final String UPLOAD_FOLDER = "Upload";
+
+    private static final String DOWNLOAD_FOLDER = "Download";
+
+    private static final String STORAGE_FOLDER = "Storage";
+
+    private static final String RESOURCES_FOLDER = "Resources";
 
     static ExecutorService executor = Executors.newFixedThreadPool(5);
 
@@ -25,11 +31,16 @@ public class Client {
             // main socket
             Socket socket = new Socket(SERVER_IP, SERVER_PORT);
             OutputStream outputStream = socket.getOutputStream();
+            DataOutputStream dos = new DataOutputStream(outputStream);
+            InputStream inputStream = socket.getInputStream();
+            DataInputStream dis = new DataInputStream(inputStream);
             PrintWriter out = new PrintWriter(outputStream, true);
+            BufferedReader in = new BufferedReader(new InputStreamReader(inputStream));
 
             System.out.println("Connected to server " + SERVER_IP + ":" + SERVER_PORT);
-//            dos.writeUTF("main");
-            out.println("main");
+//            out.println("main");
+            dos.writeUTF("main");
+
             Scanner sc = new Scanner(System.in);
 
             label:
@@ -46,12 +57,15 @@ public class Client {
                 System.out.println("====================================");
                 switch (choice) {
                     case "1":
-                        System.out.print("Enter the folder: ");
-                        uploadFolder(sc.nextLine());
+//                        System.out.print("Enter the folder: ");
+//                        uploadFolder(sc.nextLine());
+                        uploadFolder(UPLOAD_FOLDER);
                         break;
                     case "2":
-                        System.out.print("Enter the file name: ");
-                        download(sc.nextLine());
+                        queryResources(socket, dis, dos);
+                        System.out.print("Enter the file/folder name to download: ");
+//                        String fileName = sc.nextLine();
+                        downloadFolder(sc.nextLine());
                         break;
                     case "3":
                         queryAllTasks(); // Query all tasks and their progress
@@ -86,7 +100,106 @@ public class Client {
         }
     }
 
-    private static void download(String fileName2) {
+    private static void queryResources(Socket socket, DataInputStream dis, DataOutputStream dos) {
+        try {
+            dos.writeUTF("query");
+            String fileName;
+            while (!(fileName = dis.readUTF()).equals("END_OF_LIST")) {
+                System.out.print(fileName + "\t");
+            }
+            System.out.println();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    private static void downloadFolder(String fileName) {
+        File file = new File(fileName);
+
+        if (!file.exists()) {
+            System.out.println("File or folder does not exist.");
+            return;
+        }
+
+        if (file.isFile()) {
+            // 如果是文件，直接提交下载任务到线程池
+            executor.submit(() -> download(file));
+        } else if (file.isDirectory()) {
+            // 如果是文件夹，递归遍历文件夹并提交下载任务到线程池
+            traverseAndDownload(file);
+        }
+
+    }
+
+    private static void traverseAndDownload(File folder) {
+        File[] files = folder.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                if (file.isDirectory()) {
+                    // 递归处理子文件夹
+                    traverseAndDownload(file);
+                } else {
+                    // 提交文件下载任务到线程池
+                    executor.submit(() -> download(file));
+                }
+            }
+        }
+    }
+
+
+    private static void download(File file) {
+        try {
+            Socket socket = new Socket(SERVER_IP, SERVER_PORT);
+            InputStream inputStream = socket.getInputStream();
+            DataInputStream dis = new DataInputStream(inputStream);
+            PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+
+            String fileName = file.getName();
+            out.println("download");
+            out.println("download " + fileName);
+
+            long fileSize = dis.readLong();
+            ProgressInfo progress = new ProgressInfo("download", 0, fileSize);
+            progressMap.put(fileName, progress);
+            FileOutputStream fileOutputStream = new FileOutputStream(DOWNLOAD_FOLDER + fileName);
+
+            byte[] buffer = new byte[4096];
+            int bytesRead;
+            while ((bytesRead = inputStream.read(buffer)) != -1) {
+                fileOutputStream.write(buffer, 0, bytesRead);
+                updateProgress(fileName, bytesRead);
+            }
+
+            fileOutputStream.close();
+            dis.close();
+            socket.close();
+            progressMap.remove(fileName);
+
+            System.out.println("====================================");
+            System.out.println("File downloaded: " + fileName);
+            System.out.println("====================================");
+
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    private static void receiveFile(InputStream in, String fileName) {
+        try {
+            FileOutputStream fileOutputStream = new FileOutputStream(DOWNLOAD_FOLDER + fileName);
+
+            byte[] buffer = new byte[4096];
+            int bytesRead;
+            while ((bytesRead = in.read(buffer)) != -1) {
+                fileOutputStream.write(buffer, 0, bytesRead);
+            }
+            fileOutputStream.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
 
@@ -114,12 +227,11 @@ public class Client {
             OutputStream outputStream = socket.getOutputStream();
             DataOutputStream dos = new DataOutputStream(outputStream);
 
-            dos.writeUTF("file");
+            dos.writeUTF("upload");
             dos.writeUTF(file.getName()); //filename
             dos.writeLong(file.length()); //size
 
-            ProgressInfo progressInfo = new ProgressInfo();
-            progressInfo.setTotalBytes(file.length());
+            ProgressInfo progressInfo = new ProgressInfo("upload", 0, file.length());
             progressMap.put(file.getName(), progressInfo);
 
             // Create input stream to read the file
@@ -197,7 +309,7 @@ public class Client {
     // Query all upload tasks and their progress
     private static void queryAllTasks() {
         System.out.println("====================================");
-        System.out.println("Current upload tasks:");
+        System.out.println("Current tasks:");
         if (progressMap.isEmpty()) {
             System.out.println("No tasks.");
             System.out.println("============");
@@ -207,11 +319,13 @@ public class Client {
         for (Map.Entry<String, ProgressInfo> entry : progressMap.entrySet()) {
             String fileName = entry.getKey();
             ProgressInfo progressInfo = entry.getValue();
+            String task = progressInfo.getTask();
             String status = progressInfo.isPaused() ? "Paused" : "In Progress";
             long current = progressInfo.getCurrentBytes();
             long total = progressInfo.getTotalBytes(); // avoid division by zero
+            System.out.print(task + ": ");
             System.out.print(fileName + ": " + (current/1024) + "/" + (total/1024) + " KB\t");
-            System.out.printf("%.2f", (current/total*100.0));
+            System.out.printf("%.2f", (current*100.0/total));
             System.out.println("%\t" + status);
             System.out.println("====================================");
         }
