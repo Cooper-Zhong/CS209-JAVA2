@@ -13,12 +13,7 @@ public class Client {
     private static final String SERVER_IP = "localhost";
     private static final int SERVER_PORT = 12345;
     private static final String UPLOAD_FOLDER = "Upload/";
-
     private static final String DOWNLOAD_FOLDER = "Download/";
-
-    private static final String STORAGE_FOLDER = "Storage";
-
-    private static final String RESOURCES_FOLDER = "Resources";
 
     static ExecutorService executor = Executors.newFixedThreadPool(5);
 
@@ -57,8 +52,6 @@ public class Client {
                 System.out.println("====================================");
                 switch (choice) {
                     case "1":
-//                        System.out.print("Enter the folder: ");
-//                        uploadFolder(sc.nextLine());
                         uploadFolder(UPLOAD_FOLDER);
                         break;
                     case "2":
@@ -89,6 +82,7 @@ public class Client {
                         System.out.println("Invalid choice.");
                 }
             }
+
             out.close();
             socket.close();
             System.out.println("Disconnected from server.");
@@ -151,6 +145,13 @@ public class Client {
             DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
 
+
+            // 检查并创建文件夹
+            File directory = new File(DOWNLOAD_FOLDER + getDirectoryName(fileName));
+            if (!directory.exists()) {
+                directory.mkdirs(); // 递归创建文件夹
+            }
+
 //            out.println("download");
 //            out.println("download " + fileName);
             dos.writeUTF("download");
@@ -184,6 +185,14 @@ public class Client {
 
     }
 
+    private static String getDirectoryName(String fileName) {
+        int lastSeparatorIndex = fileName.lastIndexOf('/');
+        if (lastSeparatorIndex != -1) {
+            return fileName.substring(0, lastSeparatorIndex);
+        }
+        return "";
+    }
+
     private static void receiveFile(InputStream in, String fileName) {
         try {
             FileOutputStream fileOutputStream = new FileOutputStream(DOWNLOAD_FOLDER + fileName);
@@ -206,7 +215,7 @@ public class Client {
         if (files != null && files.length>0) {
             for (File file : files) {
                 if (file.isDirectory()) {
-                    uploadFolder(file.getName());
+                    uploadFolder(folderName + file.getName() + "/");
                 } else {
                     executor.submit(() -> upload(file));
                 }
@@ -225,7 +234,10 @@ public class Client {
             DataOutputStream dos = new DataOutputStream(outputStream);
 
             dos.writeUTF("upload");
-            dos.writeUTF(file.getName()); //filename
+            String fileName = file.getPath().substring(UPLOAD_FOLDER.length());
+//            String fileName = file.getPath();
+
+            dos.writeUTF(fileName); //fileName with relative path
             dos.writeLong(file.length()); //size
 
             ProgressInfo progressInfo = new ProgressInfo("upload", 0, file.length());

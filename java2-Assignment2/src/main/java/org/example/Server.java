@@ -83,7 +83,7 @@ public class Server {
                     outputStream.write(buffer, 0, bytesRead);
                 }
                 fis.close();
-                 dos.close(); //????
+                dos.close(); //????
 
                 outputStream.flush();
             }
@@ -159,21 +159,22 @@ public class Server {
         if (file.isFile()) {
             fileList.add(file.getName());
         } else if (file.isDirectory()) {
-            getAllFilesRecursive(file, fileList);
+            getAllFilesRecursive(file, fileList, fileName);
         }
 
         return fileList;
     }
 
-    private static void getAllFilesRecursive(File folder, List<String> fileList) {
+    private static void getAllFilesRecursive(File folder, List<String> fileList, String basePath) {
         File[] files = folder.listFiles();
 
         if (files != null) {
             for (File file : files) {
                 if (file.isDirectory()) {
-                    getAllFilesRecursive(file, fileList);
+                    getAllFilesRecursive(file, fileList, basePath);
                 } else {
-                    fileList.add(file.getName());
+                    // 将文件相对于资源目录的路径添加到列表中
+                    fileList.add(basePath.substring("Resources".length()) + file.getPath().substring(basePath.length()));
                 }
             }
         }
@@ -218,12 +219,29 @@ public class Server {
         }
     }
 
+    private static String getDirectoryName(String fileName) {
+        int lastSeparatorIndex = fileName.lastIndexOf('/');
+        if (lastSeparatorIndex != -1) {
+            return fileName.substring(0, lastSeparatorIndex);
+        }
+        return "";
+    }
+
 
     private static void handleUpload(Socket clientSocket, InputStream inputStream, DataInputStream dis) {
         try {
+
+
             // Read file name and size from the client
             String fileName = dis.readUTF();
             socketMap.put(fileName, clientSocket);
+
+            // 检查并创建文件夹
+            File directory = new File(STORAGE_FOLDER + getDirectoryName(fileName));
+            if (!directory.exists()) {
+                directory.mkdirs(); // 递归创建文件夹
+            }
+
             long fileSize = dis.readLong();
             ProgressInfo progressInfo = new ProgressInfo("upload", 20, fileSize);
             progressMap.put(fileName, progressInfo);
