@@ -18,7 +18,7 @@ public class Client {
     static ExecutorService executor = Executors.newFixedThreadPool(5);
 
     static List<Callable<String>> tasks = new ArrayList<>();
-    private static final Map<String, ProgressInfo> progressMap = new ConcurrentHashMap<>();
+    private static Map<String, ProgressInfo> progressMap = new ConcurrentHashMap<>();
 
 
     public static void main(String[] args) {
@@ -55,7 +55,7 @@ public class Client {
                         uploadFolder(UPLOAD_FOLDER);
                         break;
                     case "2":
-                        queryResources(socket, dis, dos);
+                        queryResources(dis, dos);
                         System.out.print("Enter the file/folder name to download: ");
                         downloadFolder(sc.nextLine(), dis, dos);
                         break;
@@ -72,10 +72,10 @@ public class Client {
                         break;
                     case "6":
                         System.out.println("Enter the file name: ");
-                        cancelTask(sc.nextLine());
+                        cancelTask(sc.nextLine(), dos);
                         break;
                     case "7":
-//                        dos.writeUTF("exit");
+                        dos.writeUTF("exit");
                         out.println("exit");
                         break label;
                     default:
@@ -94,7 +94,7 @@ public class Client {
         }
     }
 
-    private static void queryResources(Socket socket, DataInputStream dis, DataOutputStream dos) {
+    private static void queryResources(DataInputStream dis, DataOutputStream dos) {
         try {
             dos.writeUTF("query");
             String fileName;
@@ -145,6 +145,8 @@ public class Client {
             DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
 
+            File file = new File(fileName);
+
 
             // 检查并创建文件夹
             File directory = new File(DOWNLOAD_FOLDER + getDirectoryName(fileName));
@@ -152,31 +154,58 @@ public class Client {
                 directory.mkdirs(); // 递归创建文件夹
             }
 
-//            out.println("download");
-//            out.println("download " + fileName);
             dos.writeUTF("download");
             dos.writeUTF(fileName);
 
             long fileSize = dis.readLong();
             ProgressInfo progress = new ProgressInfo("download", 0, fileSize);
-            progressMap.put(fileName, progress);
+            progressMap.put(file.getName(), progress);
+            boolean canceled = false;
 
             FileOutputStream fileOutputStream = new FileOutputStream(DOWNLOAD_FOLDER + fileName);
             byte[] buffer = new byte[4096];
             int bytesRead;
+
+            label:
             while ((bytesRead = inputStream.read(buffer)) != -1) {
+
+                while (progress.isPaused()) {
+                    if (progress.isCanceled()) {
+                        canceled = true;
+                        break label;
+                    }
+                    try {
+                        Thread.sleep(100); // Sleep for a short time and check again
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                if (progress.isCanceled()) {
+                    canceled = true;
+                    break;
+                }
+
                 fileOutputStream.write(buffer, 0, bytesRead);
-                updateProgress(fileName, bytesRead);
+                updateProgress(file.getName(), bytesRead);
             }
 
             fileOutputStream.close();
+            if (canceled) {
+                System.out.println("====================================");
+                System.out.println("Download canceled: " + fileName);
+                System.out.println("====================================");
+            }
+            else {
+                System.out.println("====================================");
+                System.out.println("File downloaded: " + fileName);
+                System.out.println("====================================");
+            }
+
             dis.close();
             socket.close();
-            progressMap.remove(fileName);
+            progressMap.remove(file.getName());
 
-            System.out.println("====================================");
-            System.out.println("File downloaded: " + fileName);
-            System.out.println("====================================");
 
 
         } catch (IOException e) {
@@ -228,7 +257,7 @@ public class Client {
     private static void upload(File file) {
         //concurrently upload files
         try {
-            // socket for file transfer
+            //new socket for file transfer
             Socket socket = new Socket(SERVER_IP, SERVER_PORT);
             OutputStream outputStream = socket.getOutputStream();
             DataOutputStream dos = new DataOutputStream(outputStream);
@@ -252,9 +281,14 @@ public class Client {
 
 
             // Send file content to the server
+            label:
             while ((bytesRead = fis.read(buffer)) != -1) {
 
                 while (progressInfo.isPaused()) {
+                    if (progressInfo.isCanceled()) {
+                        canceled = true;
+                        break label;
+                    }
                     try {
                         Thread.sleep(100); // Sleep for a short time and check again
                     } catch (InterruptedException e) {
@@ -269,6 +303,13 @@ public class Client {
                 outputStream.write(buffer, 0, bytesRead);
                 updateProgress(file.getName(), bytesRead);
             }
+
+            if (canceled) {
+                System.out.println("====================================");
+                System.out.println("Upload canceled: " + file.getName());
+                System.out.println("====================================");
+            }
+
 
             // Signal the end of file
             fis.close();
@@ -289,8 +330,6 @@ public class Client {
         ProgressInfo progressInfo = progressMap.get(fileName);
         if (progressInfo != null) {
             progressInfo.setPaused(true);
-//            out.println("pause");
-//            out.println(fileName);
         }
     }
 
@@ -299,20 +338,23 @@ public class Client {
         ProgressInfo progressInfo = progressMap.get(fileName);
         if (progressInfo != null) {
             progressInfo.setPaused(false);
-//            out.println("resume");
-//            out.println(fileName);
         }
     }
 
     // Cancel a specific upload task
-    private static void cancelTask(String fileName) {
+    private static void cancelTask(String fileName, DataOutputStream dos) {
         ProgressInfo progressInfo = progressMap.get(fileName);
         if (progressInfo != null) {
-            progressInfo.setCanceled(true);
             progressInfo.setPaused(false);
-//            out.println("cancel");
-//            out.println(fileName);
+            progressInfo.setCanceled(true);
         }
+        try {
+            dos.writeUTF("cancel");
+            dos.writeUTF(fileName);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
     }
 
     // Query all upload tasks and their progress
