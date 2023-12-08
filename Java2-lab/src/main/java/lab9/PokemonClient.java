@@ -13,10 +13,10 @@ public class PokemonClient {
         final int PORT = 8082; // Replace with server port
 
         try (
-            Socket socket = new Socket(SERVER_ADDRESS, PORT);
-            BufferedReader userInput = new BufferedReader(new InputStreamReader(System.in));
-            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            PrintWriter out = new PrintWriter(socket.getOutputStream(), true)
+             Socket socket = new Socket(SERVER_ADDRESS, PORT);
+             BufferedReader userInput = new BufferedReader(new InputStreamReader(System.in));
+             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+             PrintWriter out = new PrintWriter(socket.getOutputStream(), true)
         ) {
             System.out.println("Connected to server.");
 
