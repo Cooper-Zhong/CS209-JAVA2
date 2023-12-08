@@ -1,6 +1,16 @@
 package org.example;
 
 public class ProgressInfo {
+    private String task;
+
+    public String getTask() {
+        return task;
+    }
+
+    public void setTask(String task) {
+        this.task = task;
+    }
+
     private long currentBytes;
     private long totalBytes;
     private boolean paused;
@@ -29,7 +39,8 @@ public class ProgressInfo {
         this.canceled = false;
     }
 
-    public ProgressInfo(long currentBytes, long totalBytes) {
+    public ProgressInfo(String task, long currentBytes, long totalBytes) {
+        this.task = task;
         this.currentBytes = currentBytes;
         this.totalBytes = totalBytes;
         this.paused = false;

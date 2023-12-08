@@ -4,11 +4,11 @@ import java.io.*;
 import java.net.Socket;
 
 public class TransferTask implements Runnable {
-    private static final String UPLOAD_FOLDER = "Upload/";
+    private static final String UPLOAD_FOLDER = "Client/Upload/";
 
-    private static final String STORAGE_FOLDER = "Storage/";
+    private static final String STORAGE_FOLDER = "Server/Storage/";
 
-    private static final String DOWNLOAD_FOLDER = "Download/";
+    private static final String DOWNLOAD_FOLDER = "Client/Download/";
 
     public String direction; // upload or download
 
@@ -140,7 +140,7 @@ public class TransferTask implements Runnable {
 
             dis.close();
             socket.close();
-            newClient.TaskMap.remove(file.getName());
+            Client.TaskMap.remove(file.getName());
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -177,23 +177,28 @@ public class TransferTask implements Runnable {
                 currentBytes += bytesRead;
             }
 
+            // Signal the end of file
+            fis.close();
+
             if (canceled) {
                 System.out.println("====================================");
                 System.out.println("Upload canceled: " + file.getName());
                 System.out.println("====================================");
-            }
 
-            try {
-                Thread.sleep(100); // Sleep for a short time and check again
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
+            } else {
+                try {
+                    Thread.sleep(100); // Sleep for a short time and check again
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                System.out.println("====================================");
+                System.out.println("Upload success: " + file.getName());
+                System.out.println("====================================");
 
-            // Signal the end of file
-            fis.close();
+            }
             dos.close();
             socket.close();
-            newClient.TaskMap.remove(file.getName());
+            Client.TaskMap.remove(file.getName());
 
         } catch (Exception e) {
             e.printStackTrace();
