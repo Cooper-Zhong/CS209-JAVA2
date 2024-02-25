@@ -32,7 +32,8 @@ public class Practice2 {
             index = new Random().nextInt(LENGTH) + OFFSET;
 
             for (int i = OFFSET; i<OFFSET + LENGTH; i++) {
-                int age = new Random().nextInt(18, 22);
+//                int age = new Random().nextInt(18, 22);
+                int age = new Random().nextInt();
                 intmapImpl.put(i, age);
                 // TODO: initialize arrayImpl, arraylistImpl and linkedlistImpl
                 arraylistImpl.add(age);
